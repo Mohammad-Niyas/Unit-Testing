@@ -13,7 +13,6 @@ jobs:
 
       - name: Clean possible stale Go module cache (avoid tar extract conflicts)
         run: |
-          echo "Cleaning existing go module cache (if any) before cache restore..."
           rm -rf ~/go/pkg/mod || true
           mkdir -p ~/go/pkg/mod
 
@@ -32,7 +31,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Build (linux/amd64 static-ish)
+      - name: Build (linux/amd64)
         run: |
           go mod tidy
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o myapp .
@@ -64,47 +63,34 @@ jobs:
           REMOTE_DIR_SECRET: ${{ secrets.REMOTE_DIR }}
           SERVICE_NAME_SECRET: ${{ secrets.SERVICE_NAME }}
         run: |
-          # choose key (prefer SSH_PRIVATE_KEY)
           KEY_CONTENT="${SSH_PRIVATE_KEY:-$EC2_PEM}"
           if [ -z "$KEY_CONTENT" ]; then
             echo "Error: no private key in secrets (SSH_PRIVATE_KEY or EC2_PEM)." >&2
             exit 1
           fi
-
-          # write the key and secure it
           mkdir -p ~/.ssh
           printf "%s\n" "$KEY_CONTENT" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-
-          # determine host/user/dir/service
           SSH_HOST="${SSH_HOST_SECRET:-$EC2_HOST_SECRET}"
           SSH_USER="${SSH_USER_SECRET:-$EC2_USER_SECRET}"
           REMOTE_DIR="${REMOTE_DIR_SECRET:-/home/ubuntu/app}"
           SERVICE_NAME="${SERVICE_NAME_SECRET:-myapp}"
-
           if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
             echo "Error: SSH_HOST or SSH_USER not set in secrets." >&2
             exit 1
           fi
-
-          # optional: add host key to known_hosts to avoid prompt
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts || true
-
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "REMOTE_DIR=$REMOTE_DIR" >> $GITHUB_ENV
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
 
       - name: Debug: show fingerprint of written key (optional)
-        # If this fails, it means key format is wrong — remove this step later
         run: |
-          set -e
-          echo "Key file:"
-          sed -n '1,3p' ~/.ssh/id_deploy || true
           ssh-keygen -y -f ~/.ssh/id_deploy > ~/.ssh/id_deploy.pub
-          ssh-keygen -lf ~/.ssh/id_deploy.pub
+          ssh-keygen -lf ~/.ssh/id_deploy.pub || true
 
-      - name: Copy binary to server and restart service (use -i file)
+      - name: Copy binary to server and restart service
         env:
           SSH_USER: ${{ env.SSH_USER }}
           SSH_HOST: ${{ env.SSH_HOST }}
