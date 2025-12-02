@@ -26,33 +26,34 @@ jobs:
           path: myapp
 
   deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: myapp
-          path: .
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: myapp
+        path: .
 
-      - name: Start ssh-agent
-        uses: webfactory/ssh-agent@v0.8.1
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    - name: Setup SSH key and agent (manual)
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+        chmod 600 ~/.ssh/id_deploy
+        # start agent and add key
+        eval "$(ssh-agent -s)"
+        ssh-add ~/.ssh/id_deploy
+        # avoid host-check prompting (we still use StrictHostKeyChecking=no on scp/ssh)
+        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts || true
 
-      - name: Deploy to EC2
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
-          SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
-        run: |
-          # Copy binary to EC2
-          scp -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
-
-          # Restart systemd service
-          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "
-            chmod +x ${REMOTE_DIR}/myapp &&
-            sudo systemctl restart ${SERVICE_NAME} &&
-            sudo systemctl status ${SERVICE_NAME} --no-pager -l
-          "
+    - name: Copy binary to server and restart service
+      env:
+        SSH_USER: ${{ secrets.SSH_USER }}
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+        SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
+      run: |
+        scp -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
+        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "chmod +x ${REMOTE_DIR}/myapp && sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
