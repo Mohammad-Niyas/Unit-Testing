@@ -37,6 +37,7 @@ func UserLoginHandler(c *gin.Context) {
 	if err := config.DB.Where("email = ?", UserInput.Email).First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"message": "User not found",
+			"code":http.StatusUnauthorized,
 			"err":     err.Error(),
 		})
 		return
