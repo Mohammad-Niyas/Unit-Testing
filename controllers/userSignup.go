@@ -11,6 +11,7 @@ import (
 )
 
 func HashPassword(password string) (string, error) {
+	
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Println("Failed to hash password")
@@ -60,3 +61,4 @@ func SignUp(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "User created successfully"})
 }
+ 
