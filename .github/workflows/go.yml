@@ -11,6 +11,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Clean possible stale Go module cache (avoid tar extract conflicts)
+        run: |
+          echo "Cleaning existing go module cache (if any) before cache restore..."
+          rm -rf ~/go/pkg/mod || true
+          mkdir -p ~/go/pkg/mod
+
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
@@ -47,10 +53,10 @@ jobs:
           name: myapp
           path: .
 
-      - name: Setup SSH key & agent (manual)
+      - name: Setup SSH key file (no ssh-agent)
         env:
-          SSH_PRIVATE_KEY_SECRET: ${{ secrets.SSH_PRIVATE_KEY }}
-          EC2_PEM_SECRET: ${{ secrets.EC2_PEM }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          EC2_PEM: ${{ secrets.EC2_PEM }}
           SSH_HOST_SECRET: ${{ secrets.SSH_HOST }}
           EC2_HOST_SECRET: ${{ secrets.EC2_HOST }}
           SSH_USER_SECRET: ${{ secrets.SSH_USER }}
@@ -58,43 +64,47 @@ jobs:
           REMOTE_DIR_SECRET: ${{ secrets.REMOTE_DIR }}
           SERVICE_NAME_SECRET: ${{ secrets.SERVICE_NAME }}
         run: |
-          # choose which secret to use for the private key (prefer SSH_PRIVATE_KEY, fallback to EC2_PEM)
-          SSH_KEY_CONTENT="${SSH_PRIVATE_KEY_SECRET:-$EC2_PEM_SECRET}"
-          if [ -z "$SSH_KEY_CONTENT" ]; then
-            echo "Error: No SSH private key found in secrets (SSH_PRIVATE_KEY or EC2_PEM)." >&2
+          # choose key (prefer SSH_PRIVATE_KEY)
+          KEY_CONTENT="${SSH_PRIVATE_KEY:-$EC2_PEM}"
+          if [ -z "$KEY_CONTENT" ]; then
+            echo "Error: no private key in secrets (SSH_PRIVATE_KEY or EC2_PEM)." >&2
             exit 1
           fi
 
-          # write key to file
+          # write the key and secure it
           mkdir -p ~/.ssh
-          echo "$SSH_KEY_CONTENT" > ~/.ssh/id_deploy
+          printf "%s\n" "$KEY_CONTENT" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
 
-          # start agent and add key
-          eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/id_deploy
-
-          # determine host/user/remote dir/service with fallbacks
+          # determine host/user/dir/service
           SSH_HOST="${SSH_HOST_SECRET:-$EC2_HOST_SECRET}"
           SSH_USER="${SSH_USER_SECRET:-$EC2_USER_SECRET}"
           REMOTE_DIR="${REMOTE_DIR_SECRET:-/home/ubuntu/app}"
           SERVICE_NAME="${SERVICE_NAME_SECRET:-myapp}"
 
           if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
-            echo "Error: SSH host or user not set in secrets (SSH_HOST/EC2_HOST and SSH_USER/EC2_USER)." >&2
+            echo "Error: SSH_HOST or SSH_USER not set in secrets." >&2
             exit 1
           fi
 
-          # add host key to known_hosts (avoid prompt)
+          # optional: add host key to known_hosts to avoid prompt
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts || true
 
-          # export for next step
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
           echo "REMOTE_DIR=$REMOTE_DIR" >> $GITHUB_ENV
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
 
-      - name: Copy binary to server and restart service
+      - name: Debug: show fingerprint of written key (optional)
+        # If this fails, it means key format is wrong — remove this step later
+        run: |
+          set -e
+          echo "Key file:"
+          sed -n '1,3p' ~/.ssh/id_deploy || true
+          ssh-keygen -y -f ~/.ssh/id_deploy > ~/.ssh/id_deploy.pub
+          ssh-keygen -lf ~/.ssh/id_deploy.pub
+
+      - name: Copy binary to server and restart service (use -i file)
         env:
           SSH_USER: ${{ env.SSH_USER }}
           SSH_HOST: ${{ env.SSH_HOST }}
@@ -103,5 +113,6 @@ jobs:
         run: |
           set -e
           echo "Deploying to ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR} and restarting ${SERVICE_NAME}"
-          scp -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
-          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "chmod +x ${REMOTE_DIR}/myapp && sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
+          scp -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} \
+            "chmod +x ${REMOTE_DIR}/myapp && sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
