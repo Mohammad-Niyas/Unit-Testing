@@ -46,7 +46,7 @@ jobs:
         run: |
           echo "${EC2_KEY}" > "deploy_key.pem"
           chmod 600 deploy_key.pem
-          ssh -o StrictHostKeyChecking=no -i deploy_key.pem ubuntu@ec2-13-60-89-35.eu-north-1.compute.amazonaws.com << EOF
+          ssh -o StrictHostKeyChecking=no -i deploy_key.pem ubuntu@ec2-13-61-178-38.eu-north-1.compute.amazonaws.com << EOF
                 
             git pull origin master
             pkill -f app || true
