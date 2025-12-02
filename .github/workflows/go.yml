@@ -48,7 +48,7 @@ jobs:
           chmod 600 deploy_key.pem
           ssh -o StrictHostKeyChecking=no -i deploy_key.pem ubuntu@ec2-13-61-178-38.eu-north-1.compute.amazonaws.com << EOF
                 
-            git pull origin master
+            git pull origin main
             pkill -f app || true
             go build -o app
             nohup ./app > app.log 2>&1 &
