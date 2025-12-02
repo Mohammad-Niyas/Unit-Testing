@@ -62,15 +62,21 @@ jobs:
           echo "REMOTE_DIR=${REMOTE_DIR:-/home/ubuntu/app}" >> $GITHUB_ENV
           echo "SERVICE_NAME=${SERVICE_NAME:-myapp}" >> $GITHUB_ENV
 
-      - name: Copy binary to server and restart service
+      - name: Copy binary to server and restart service (safe move)
         env:
           SSH_HOST: ${{ env.SSH_HOST }}
           SSH_USER: ${{ env.SSH_USER }}
           REMOTE_DIR: ${{ env.REMOTE_DIR }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
         run: |
-          set -e
-          echo "Deploying to ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR} and restarting ${SERVICE_NAME}"
-          scp -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
+          set -euo pipefail
+          echo "DEBUG: Deploying to ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR} and restarting ${SERVICE_NAME}"
+          TMP_REMOTE="/home/${SSH_USER}/myapp_tmp_$$"
+          echo "Uploading to ${TMP_REMOTE}"
+          scp -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${TMP_REMOTE}
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} \
-            "chmod +x ${REMOTE_DIR}/myapp && sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
+            "sudo mkdir -p ${REMOTE_DIR} && sudo chown ${SSH_USER}:${SSH_USER} ${REMOTE_DIR} || true"
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} \
+            "sudo mv -f ${TMP_REMOTE} ${REMOTE_DIR}/myapp && sudo chmod +x ${REMOTE_DIR}/myapp && sudo chown ${SSH_USER}:${SSH_USER} ${REMOTE_DIR}/myapp"
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} \
+            "sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
