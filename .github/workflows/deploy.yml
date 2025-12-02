@@ -11,32 +11,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Clean possible stale Go module cache (avoid tar extract conflicts)
-        run: |
-          rm -rf ~/go/pkg/mod || true
-          mkdir -p ~/go/pkg/mod
-
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.24.x'
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Build (linux/amd64)
+      - name: Build linux binary
         run: |
           go mod tidy
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o myapp .
 
-      - name: Upload artifact
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: myapp
@@ -46,54 +31,41 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifact
+      - name: Download binary
         uses: actions/download-artifact@v4
         with:
           name: myapp
           path: .
 
-      - name: Setup SSH key file (no ssh-agent)
+      - name: Setup SSH key file
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          EC2_PEM: ${{ secrets.EC2_PEM }}
-          SSH_HOST_SECRET: ${{ secrets.SSH_HOST }}
-          EC2_HOST_SECRET: ${{ secrets.EC2_HOST }}
-          SSH_USER_SECRET: ${{ secrets.SSH_USER }}
-          EC2_USER_SECRET: ${{ secrets.EC2_USER }}
-          REMOTE_DIR_SECRET: ${{ secrets.REMOTE_DIR }}
-          SERVICE_NAME_SECRET: ${{ secrets.SERVICE_NAME }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+          SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
         run: |
-          KEY_CONTENT="${SSH_PRIVATE_KEY:-$EC2_PEM}"
-          if [ -z "$KEY_CONTENT" ]; then
-            echo "Error: no private key in secrets (SSH_PRIVATE_KEY or EC2_PEM)." >&2
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "Error: SSH_PRIVATE_KEY secret missing" >&2
+            exit 1
+          fi
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "Error: SSH_HOST or SSH_USER secret missing" >&2
             exit 1
           fi
           mkdir -p ~/.ssh
-          printf "%s\n" "$KEY_CONTENT" > ~/.ssh/id_deploy
+          printf "%s\n" "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          SSH_HOST="${SSH_HOST_SECRET:-$EC2_HOST_SECRET}"
-          SSH_USER="${SSH_USER_SECRET:-$EC2_USER_SECRET}"
-          REMOTE_DIR="${REMOTE_DIR_SECRET:-/home/ubuntu/app}"
-          SERVICE_NAME="${SERVICE_NAME_SECRET:-myapp}"
-          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
-            echo "Error: SSH_HOST or SSH_USER not set in secrets." >&2
-            exit 1
-          fi
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts || true
           echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
           echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
-          echo "REMOTE_DIR=$REMOTE_DIR" >> $GITHUB_ENV
-          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
-
-      - name: Debug: show fingerprint of written key (optional)
-        run: |
-          ssh-keygen -y -f ~/.ssh/id_deploy > ~/.ssh/id_deploy.pub
-          ssh-keygen -lf ~/.ssh/id_deploy.pub || true
+          echo "REMOTE_DIR=${REMOTE_DIR:-/home/ubuntu/app}" >> $GITHUB_ENV
+          echo "SERVICE_NAME=${SERVICE_NAME:-myapp}" >> $GITHUB_ENV
 
       - name: Copy binary to server and restart service
         env:
-          SSH_USER: ${{ env.SSH_USER }}
           SSH_HOST: ${{ env.SSH_HOST }}
+          SSH_USER: ${{ env.SSH_USER }}
           REMOTE_DIR: ${{ env.REMOTE_DIR }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
         run: |
