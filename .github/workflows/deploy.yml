@@ -40,8 +40,8 @@ jobs:
       - name: Setup SSH key file
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
           REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
         run: |
@@ -56,9 +56,9 @@ jobs:
           mkdir -p ~/.ssh
           printf "%s\n" "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts || true
-          echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
-          echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts || true
+          echo "SSH_HOST=$EC2_HOST" >> $GITHUB_ENV
+          echo "SSH_USER=$EC2_USER" >> $GITHUB_ENV
           echo "REMOTE_DIR=${REMOTE_DIR:-/home/ubuntu/app}" >> $GITHUB_ENV
           echo "SERVICE_NAME=${SERVICE_NAME:-myapp}" >> $GITHUB_ENV
 
