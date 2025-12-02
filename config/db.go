@@ -11,6 +11,7 @@ var (
 	ConfigErr   error
 )
 
+
 func DBconnect() {
 	var err error
 	dsn := "host=localhost user=postgres password=466450 dbname=unittest port=5432"
