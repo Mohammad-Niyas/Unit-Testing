@@ -94,7 +94,7 @@ jobs:
           echo "REMOTE_DIR=$REMOTE_DIR" >> $GITHUB_ENV
           echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
 
-            - name: Copy binary to server and restart service
+      - name: Copy binary to server and restart service
         env:
           SSH_USER: ${{ env.SSH_USER }}
           SSH_HOST: ${{ env.SSH_HOST }}
@@ -105,4 +105,3 @@ jobs:
           echo "Deploying to ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR} and restarting ${SERVICE_NAME}"
           scp -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
           ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "chmod +x ${REMOTE_DIR}/myapp && sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
-
