@@ -1,0 +1,13 @@
+WORK=C:\Users\MOHAMM~1\AppData\Local\Temp\go-build3938897657
+cd C:\Users\mohammad niyas\Documents\Unit Testing Project
+git status --porcelain
+cd C:\Users\mohammad niyas\Documents\Unit Testing Project
+git -c log.showsignature=false log -1 --format=%H:%ct
+cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git -c log.showsignature=false log --no-decorate -n1 '--format=format:%H %ct %D' eca86e61dbb4209dcfebc3e2d744cda97e01ab18 --
+0.021s # cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git -c log.showsignature=false log --no-decorate -n1 '--format=format:%H %ct %D' eca86e61dbb4209dcfebc3e2d744cda97e01ab18 --
+cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git for-each-ref --format %(refname) refs/tags --merged eca86e61dbb4209dcfebc3e2d744cda97e01ab18
+0.020s # cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git for-each-ref --format %(refname) refs/tags --merged eca86e61dbb4209dcfebc3e2d744cda97e01ab18
+cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git -c log.showsignature=false log --no-decorate -n1 '--format=format:%H %ct %D' eca86e61dbb4 --
+0.021s # cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git -c log.showsignature=false log --no-decorate -n1 '--format=format:%H %ct %D' eca86e61dbb4 --
+cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git cat-file blob eca86e61dbb4209dcfebc3e2d744cda97e01ab18:go.mod
+0.019s # cd C:\Users\mohammad niyas\Documents\Unit Testing Project; git cat-file blob eca86e61dbb4209dcfebc3e2d744cda97e01ab18:go.mod

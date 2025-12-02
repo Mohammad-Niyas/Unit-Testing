@@ -8,13 +8,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v4
+      - name: Setup Go
+        uses: actions/setup-go@v4
         with:
           go-version: '1.24.x'
 
-      - name: Build Go App
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build (linux/amd64 static-ish)
         run: |
           go mod tidy
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o myapp .
@@ -26,34 +38,71 @@ jobs:
           path: myapp
 
   deploy:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - name: Download artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: myapp
-        path: .
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: myapp
+          path: .
 
-    - name: Setup SSH key and agent (manual)
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      run: |
-        mkdir -p ~/.ssh
-        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
-        chmod 600 ~/.ssh/id_deploy
-        # start agent and add key
-        eval "$(ssh-agent -s)"
-        ssh-add ~/.ssh/id_deploy
-        # avoid host-check prompting (we still use StrictHostKeyChecking=no on scp/ssh)
-        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts || true
+      - name: Setup SSH key & agent (manual)
+        env:
+          SSH_PRIVATE_KEY_SECRET: ${{ secrets.SSH_PRIVATE_KEY }}
+          EC2_PEM_SECRET: ${{ secrets.EC2_PEM }}
+          SSH_HOST_SECRET: ${{ secrets.SSH_HOST }}
+          EC2_HOST_SECRET: ${{ secrets.EC2_HOST }}
+          SSH_USER_SECRET: ${{ secrets.SSH_USER }}
+          EC2_USER_SECRET: ${{ secrets.EC2_USER }}
+          REMOTE_DIR_SECRET: ${{ secrets.REMOTE_DIR }}
+          SERVICE_NAME_SECRET: ${{ secrets.SERVICE_NAME }}
+        run: |
+          # choose which secret to use for the private key (prefer SSH_PRIVATE_KEY, fallback to EC2_PEM)
+          SSH_KEY_CONTENT="${SSH_PRIVATE_KEY_SECRET:-$EC2_PEM_SECRET}"
+          if [ -z "$SSH_KEY_CONTENT" ]; then
+            echo "Error: No SSH private key found in secrets (SSH_PRIVATE_KEY or EC2_PEM)." >&2
+            exit 1
+          fi
 
-    - name: Copy binary to server and restart service
-      env:
-        SSH_USER: ${{ secrets.SSH_USER }}
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
-        SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
-      run: |
-        scp -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
-        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "chmod +x ${REMOTE_DIR}/myapp && sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
+          # write key to file
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY_CONTENT" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          # start agent and add key
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_deploy
+
+          # determine host/user/remote dir/service with fallbacks
+          SSH_HOST="${SSH_HOST_SECRET:-$EC2_HOST_SECRET}"
+          SSH_USER="${SSH_USER_SECRET:-$EC2_USER_SECRET}"
+          REMOTE_DIR="${REMOTE_DIR_SECRET:-/home/ubuntu/app}"
+          SERVICE_NAME="${SERVICE_NAME_SECRET:-myapp}"
+
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "Error: SSH host or user not set in secrets (SSH_HOST/EC2_HOST and SSH_USER/EC2_USER)." >&2
+            exit 1
+          fi
+
+          # add host key to known_hosts (avoid prompt)
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts || true
+
+          # export for next step
+          echo "SSH_HOST=$SSH_HOST" >> $GITHUB_ENV
+          echo "SSH_USER=$SSH_USER" >> $GITHUB_ENV
+          echo "REMOTE_DIR=$REMOTE_DIR" >> $GITHUB_ENV
+          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+
+            - name: Copy binary to server and restart service
+        env:
+          SSH_USER: ${{ env.SSH_USER }}
+          SSH_HOST: ${{ env.SSH_HOST }}
+          REMOTE_DIR: ${{ env.REMOTE_DIR }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+        run: |
+          set -e
+          echo "Deploying to ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR} and restarting ${SERVICE_NAME}"
+          scp -o StrictHostKeyChecking=no myapp ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/myapp
+          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "chmod +x ${REMOTE_DIR}/myapp && sudo systemctl restart ${SERVICE_NAME} && sudo systemctl status ${SERVICE_NAME} --no-pager -l"
+
