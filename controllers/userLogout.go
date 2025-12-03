@@ -7,5 +7,5 @@ import (
 )
 
 func UserLogoutHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Logout successfull"})
+	c.JSON(http.StatusOK, gin.H{"message": "Logout successfully"})
 }
