@@ -10,12 +10,13 @@ import (
 	"main.go/models"
 )
 
-func UserLoginHandler(c *gin.Context) {
-	var user models.UserModel
-	var UserInput struct {
+var UserInput struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
+
+func UserLoginHandler(c *gin.Context) {
+	var user models.UserModel
 
 	if err := c.ShouldBindJSON(&UserInput); err != nil {
 		log.Println("Failed to bind login data")
@@ -26,13 +27,7 @@ func UserLoginHandler(c *gin.Context) {
 		return
 	}
 
-	if UserInput.Email == "" || UserInput.Password == "" {
-		log.Println("Missing email or password")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Email and Password are required",
-		})
-		return
-	}
+	sample(c)
 
 	if err := config.DB.Where("email = ?", UserInput.Email).First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -54,4 +49,14 @@ func UserLoginHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
 	})
+}
+
+func sample(c *gin.Context){
+	if UserInput.Email == "" || UserInput.Password == "" {
+		log.Println("Missing email or password")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "Email and Password are required",
+		})
+		return
+	}
 }
