@@ -52,6 +52,6 @@ func UserLoginHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Login successfull",
+		"message": "Login successful",
 	})
 }
