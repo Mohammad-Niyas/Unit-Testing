@@ -43,7 +43,7 @@ func TestUserLoginHandler(t *testing.T) {
 				"password": "MyPassword@123",
 			},
 			ExpectedStatus: http.StatusOK,
-			ExpectedBody:   `"Login successful"`,
+			ExpectedBody:   `"Login successfull"`,
 		},
 		{
 			Name: "Missing Fields",
