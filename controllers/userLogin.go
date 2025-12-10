@@ -20,7 +20,7 @@ func UserLoginHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&UserInput); err != nil {
 		log.Println("Failed to bind login data")
 		c.JSON(400, gin.H{
-			"message": "Failed to bind input data",
+			"message": "Failed to bind input datas",
 			"err":     err.Error(),
 		})
 		return
